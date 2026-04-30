@@ -8,7 +8,6 @@
     "start": "node api/webhook.js"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.11.0",
-    "node-fetch": "^3.3.2"
+    "@google/generative-ai": "^0.21.0"
   }
 }

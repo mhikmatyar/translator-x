@@ -1,11 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import fetch from "node-fetch";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 
 // User preferences (Temporary in-memory, will reset on cold start)
-// For production, use Redis or a database.
 const userPrefs = {};
 
 export default async function handler(req, res) {
@@ -23,6 +21,18 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     console.error("Error handling update:", error);
+    // Try to notify user about the error
+    try {
+      const chatId = update.message?.chat?.id || update.callback_query?.message?.chat?.id;
+      if (chatId) {
+        await sendTelegram("sendMessage", {
+          chat_id: chatId,
+          text: `❌ Error: ${error.message}`
+        });
+      }
+    } catch (e) {
+      console.error("Failed to send error notification:", e);
+    }
   }
 
   return res.status(200).json({ ok: true });
@@ -33,15 +43,18 @@ async function handleMessage(message) {
   const userId = message.from.id;
   const text = message.text || message.caption || "";
 
+  // Extract command (handle /start@botname format)
+  const command = text.split("@")[0].split(" ")[0].toLowerCase();
+
   // 1. Handle Commands
-  if (text === "/start") {
+  if (command === "/start") {
     return sendTelegram("sendMessage", {
       chat_id: chatId,
-      text: "👋 Halo! Saya adalah X-Reply Bot.\n\nKirimkan saya link X, teks post, screenshot, atau video dari X, dan saya akan memberikan saran balasan yang menarik.\n\nGunakan /settings untuk mengatur bahasa dan gaya bahasa.",
+      text: "👋 Halo! Saya adalah X-Reply Bot.\n\nKirimkan saya teks post, screenshot, atau video dari X, dan saya akan memberikan saran balasan yang menarik.\n\nGunakan /settings untuk mengatur bahasa dan gaya bahasa.",
     });
   }
 
-  if (text === "/settings") {
+  if (command === "/settings") {
     return sendSettings(chatId, userId);
   }
 
@@ -50,6 +63,8 @@ async function handleMessage(message) {
     chat_id: chatId,
     text: "⏳ Sedang memproses konteks...",
   });
+
+  const loadingMsgId = loadingMsg?.result?.message_id;
 
   try {
     // 3. Prepare Gemini Parts
@@ -69,10 +84,21 @@ async function handleMessage(message) {
       const fileId = message.video.file_id;
       const mediaData = await getFileData(fileId);
       parts.push(mediaData);
+    } else if (message.document) {
+      // Handle documents (e.g. images sent as files)
+      const mime = message.document.mime_type || "";
+      if (mime.startsWith("image/") || mime.startsWith("video/")) {
+        const fileId = message.document.file_id;
+        const mediaData = await getFileData(fileId);
+        parts.push(mediaData);
+      }
     }
 
     if (parts.length === 0) {
-      return editTelegram(chatId, loadingMsg.result.message_id, "Silakan kirim pesan teks, foto, atau video.");
+      if (loadingMsgId) {
+        return editTelegram(chatId, loadingMsgId, "Silakan kirim pesan teks, foto, atau video.");
+      }
+      return;
     }
 
     // 4. Get User Prefs
@@ -80,7 +106,7 @@ async function handleMessage(message) {
 
     // 5. Generate Response with Gemini
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash", // Use flash for speed
+      model: "gemini-2.0-flash",
       systemInstruction: `Anda adalah pakar media sosial X (Twitter). 
 Tugas Anda adalah memberikan saran balasan (reply) yang masuk akal, menarik, dan sesuai konteks untuk post yang dikirimkan.
 Gaya bahasa: ${prefs.style}
@@ -91,18 +117,26 @@ Berikan 3 pilihan balasan:
 2. Menarik/Witty
 3. Diskusi/Pertanyaan
 
-Sertakan juga alasan singkat mengapa balasan tersebut bagus.`
+Sertakan juga alasan singkat mengapa balasan tersebut bagus.
+Jangan gunakan format Markdown yang kompleks. Gunakan teks biasa atau emoji saja.`
     });
 
     const result = await model.generateContent({ contents: [{ role: "user", parts }] });
     const responseText = result.response.text();
 
     // 6. Send Response
-    await editTelegram(chatId, loadingMsg.result.message_id, responseText);
+    if (loadingMsgId) {
+      await editTelegram(chatId, loadingMsgId, responseText);
+    }
 
   } catch (error) {
     console.error("Gemini Error:", error);
-    await editTelegram(chatId, loadingMsg.result.message_id, "Maaf, terjadi kesalahan saat memproses permintaan Anda.");
+    const errMsg = `❌ Error: ${error.message || "Unknown error"}`;
+    if (loadingMsgId) {
+      await editTelegram(chatId, loadingMsgId, errMsg);
+    } else {
+      await sendTelegram("sendMessage", { chat_id: chatId, text: errMsg });
+    }
   }
 }
 
@@ -130,8 +164,7 @@ async function sendSettings(chatId, userId) {
   
   return sendTelegram("sendMessage", {
     chat_id: chatId,
-    text: `⚙️ *Pengaturan Balasan*\n\nBahasa saat ini: ${prefs.lang}\nGaya saat ini: ${prefs.style}`,
-    parse_mode: "Markdown",
+    text: `⚙️ Pengaturan Balasan\n\nBahasa saat ini: ${prefs.lang}\nGaya saat ini: ${prefs.style}`,
     reply_markup: {
       inline_keyboard: [
         [
@@ -155,8 +188,7 @@ async function editSettings(chatId, messageId, userId) {
   return sendTelegram("editMessageText", {
     chat_id: chatId,
     message_id: messageId,
-    text: `⚙️ *Pengaturan Balasan*\n\nBahasa saat ini: ${prefs.lang}\nGaya saat ini: ${prefs.style}`,
-    parse_mode: "Markdown",
+    text: `⚙️ Pengaturan Balasan\n\nBahasa saat ini: ${prefs.lang}\nGaya saat ini: ${prefs.style}`,
     reply_markup: {
       inline_keyboard: [
         [
@@ -189,7 +221,6 @@ async function editTelegram(chatId, messageId, text) {
     chat_id: chatId,
     message_id: messageId,
     text: text,
-    parse_mode: "Markdown"
   });
 }
 
@@ -204,7 +235,12 @@ async function getFileData(fileId) {
   
   // Determine mimeType based on extension
   const ext = filePath.split('.').pop().toLowerCase();
-  const mimeType = ext === 'mp4' ? 'video/mp4' : 'image/jpeg';
+  const mimeMap = {
+    'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+    'gif': 'image/gif', 'webp': 'image/webp', 'mp4': 'video/mp4',
+    'webm': 'video/webm', 'avi': 'video/avi',
+  };
+  const mimeType = mimeMap[ext] || 'image/jpeg';
 
   return {
     inlineData: {
