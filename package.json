@@ -1,0 +1,14 @@
+{
+  "name": "translator-x",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Telegram Bot to help reply to X posts using Gemini AI",
+  "main": "api/webhook.js",
+  "scripts": {
+    "start": "node api/webhook.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.11.0",
+    "node-fetch": "^3.3.2"
+  }
+}
