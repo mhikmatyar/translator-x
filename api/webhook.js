@@ -106,7 +106,7 @@ async function handleMessage(message) {
 
     // 5. Generate Response with Gemini
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.0-flash",
+      model: "gemini-2.0-flash-lite",
       systemInstruction: `Anda adalah pakar media sosial X (Twitter). 
 Tugas Anda adalah memberikan saran balasan (reply) yang masuk akal, menarik, dan sesuai konteks untuk post yang dikirimkan.
 Gaya bahasa: ${prefs.style}
