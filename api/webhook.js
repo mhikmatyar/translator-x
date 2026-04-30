@@ -131,6 +131,8 @@ Berikan 3 pilihan balasan:
 3. Diskusi/Pertanyaan
 
 Sertakan juga alasan singkat mengapa balasan tersebut bagus.
+Jika bahasa balasan BUKAN Indonesian, tambahkan terjemahan ke Bahasa Indonesia di bawah setiap balasan dengan format:
+(Terjemahan: ...)
 Jangan gunakan format Markdown yang kompleks. Gunakan teks biasa atau emoji saja.`;
 
     const response = await callOpenRouter(selectedModel.id, systemPrompt, contentParts);
