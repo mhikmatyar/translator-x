@@ -1,15 +1,16 @@
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
-// Available free models on OpenRouter (with vision support)
+// Available free models on OpenRouter
 const MODELS = {
-  "qwen-vl": { id: "qwen/qwen2.5-vl-72b-instruct:free", name: "Qwen 2.5 VL 72B", vision: true },
-  "llama-maverick": { id: "meta-llama/llama-4-maverick:free", name: "Llama 4 Maverick", vision: true },
-  "gemini-flash": { id: "google/gemini-2.0-flash-exp:free", name: "Gemini 2.0 Flash", vision: true },
+  "auto": { id: "openrouter/free", name: "Auto (Free)", vision: true },
+  "gemma-4": { id: "google/gemma-4-31b-it:free", name: "Gemma 4 31B", vision: true },
+  "gemma-4-small": { id: "google/gemma-4-26b-a4b-it:free", name: "Gemma 4 26B", vision: true },
   "deepseek-v3": { id: "deepseek/deepseek-chat-v3-0324:free", name: "DeepSeek V3", vision: false },
 };
 
-const DEFAULT_MODEL = "qwen-vl";
+const DEFAULT_MODEL = "auto";
+
 
 // User preferences (in-memory, resets on cold start)
 const userPrefs = {};
